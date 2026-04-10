@@ -46,11 +46,10 @@ const googleProvider = new firebase.auth.GoogleAuthProvider();
 const Icon = ({ name, className }) => { const iconDef = window.lucide[name]; if (!iconDef) return null; return React.createElement('svg', { xmlns: 'http://www.w3.org/2000/svg', width: '24', height: '24', viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: '2', strokeLinecap: 'round', strokeLinejoin: 'round', className: className }, iconDef.map(([tag, attrs], i) => React.createElement(tag, { ...attrs, key: i }))); }; 
 
 async function generateContent(apiKey, model, prompt, base64Image, mimeType, provider = 'gemini') { 
-  // VIP Keys - TRUY CẬP TRỰC TIẾP ĐỂ ĐẢM BẢO CHÍNH XÁC 100%
-  const VIP_GEMINI = 'AIzaSyARBVPiRntAnHAkCyknEAzNuYXGvLYzoss';
-  const VIP_OR = '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';
+  const defaultGemini = 'AIzaSyARBVPiRntAnHAkCyknEAzNuYXGvLYzoss';
+  const defaultOR = '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';
   
-  const activeKey = provider === 'openrouter' ? VIP_OR : VIP_GEMINI;
+  const activeKey = apiKey || (provider === 'openrouter' ? defaultOR : defaultGemini);
   
   // Ánh xạ model nếu người dùng chọn nhầm model Gemini khi đang ở chế độ OpenRouter
   let targetModel = model;
@@ -76,7 +75,7 @@ async function generateContent(apiKey, model, prompt, base64Image, mimeType, pro
         const response = await fetch(url, {
           method: "POST",
           headers: {
-            "Authorization": `Bearer ${VIP_OR.trim()}`,
+            "Authorization": `Bearer ${activeKey.trim()}`,
             "Content-Type": "application/json",
             "HTTP-Referer": "https://openrouter.ai", // Sử dụng referer mặc định để tránh lỗi phân quyền
             "X-Title": "QuantBet AI"
@@ -119,7 +118,7 @@ async function generateContent(apiKey, model, prompt, base64Image, mimeType, pro
     return result.content;
   } else {
     // Gemini implementation
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${VIP_GEMINI}`; 
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${activeKey}`; 
     let parts = []; 
     if (base64Image && mimeType) { 
       parts.push({ inline_data: { mime_type: mimeType, data: base64Image } }); 
@@ -143,7 +142,10 @@ async function generateContent(apiKey, model, prompt, base64Image, mimeType, pro
     }); 
 
     if (!response.ok) {
-      const err = await response.json();
+      const errText = await response.text();
+      let err;
+      try { err = JSON.parse(errText); } catch(e) { err = { error: { message: errText } }; }
+      
       if (err.error?.message?.includes('google_search') || err.error?.message?.includes('tool')) {
         delete body.tools;
         response = await fetch(url, { 
@@ -151,13 +153,14 @@ async function generateContent(apiKey, model, prompt, base64Image, mimeType, pro
           headers: { 'Content-Type': 'application/json' }, 
           body: JSON.stringify(body) 
         });
+        if (!response.ok) {
+           const err2 = await response.json();
+           throw new Error(err2.error?.message || 'Lỗi kết nối Gemini API');
+        }
+      } else {
+        throw new Error(err.error?.message || 'Lỗi kết nối Gemini API');
       }
     }
-
-    if (!response.ok) { 
-      const err = await response.json(); 
-      throw new Error(err.error?.message || 'Lỗi kết nối Gemini API'); 
-    } 
     const data = await response.json(); 
     return data.candidates[0].content.parts[0].text; 
   }
@@ -192,10 +195,10 @@ const [aiProvider, setAiProvider] = useState(() => {
     return localStorage.getItem('qb_v7_provider') || 'gemini';
   } catch (e) { return 'gemini'; }
 });
-const [customApiKey, setCustomApiKey] = useState('AIzaSyARBVPiRntAnHAkCyknEAzNuYXGvLYzoss');
-const [openRouterApiKey, setOpenRouterApiKey] = useState('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');
 const DEFAULT_OR_KEY = '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';
 const DEFAULT_GEMINI_KEY = 'AIzaSyARBVPiRntAnHAkCyknEAzNuYXGvLYzoss';
+const [customApiKey, setCustomApiKey] = useState(() => localStorage.getItem('qb_v7_gemini_key') || DEFAULT_GEMINI_KEY);
+const [openRouterApiKey, setOpenRouterApiKey] = useState(() => localStorage.getItem('qb_v7_or_key') || DEFAULT_OR_KEY);
 const [openRouterModels, setOpenRouterModels] = useState([]);
 const [isScanning, setIsScanning] = useState(false);
 const [isResearching, setIsResearching] = useState(false);
@@ -340,7 +343,9 @@ useEffect(() => {
     localStorage.setItem('qb_v7_model', selectedModel);
     localStorage.setItem('qb_v7_provider', aiProvider);
   }
-}, [bankroll, ledger, selectedModel, aiProvider, user]);
+  localStorage.setItem('qb_v7_gemini_key', customApiKey);
+  localStorage.setItem('qb_v7_or_key', openRouterApiKey);
+}, [bankroll, ledger, selectedModel, aiProvider, user, customApiKey, openRouterApiKey]);
 
 const handleLogin = async () => {
   try {
@@ -1564,9 +1569,26 @@ className="w-full bg-black border-2 border-white/20 rounded-xl px-4 py-3 font-bo
 )}
 </div>
 
-<div className="p-4 bg-emerald-500/10 border-2 border-emerald-500 rounded-xl">
-  <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1">TRẠNG THÁI HỆ THỐNG</p>
-  <p className="text-xs font-bold text-white/80">Hệ thống AI đã được cấu hình sẵn với Key VIP. Sẵn sàng hoạt động 24/7.</p>
+<div className="space-y-4">
+  <label className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">Gemini API Key</label>
+  <input 
+    type="password" 
+    value={customApiKey}
+    onChange={(e) => setCustomApiKey(e.target.value)}
+    placeholder="Nhập Gemini API Key..."
+    className="w-full bg-black border-2 border-white/20 rounded-xl px-4 py-3 font-mono text-sm focus:border-emerald-500 outline-none"
+  />
+</div>
+
+<div className="space-y-4">
+  <label className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">OpenRouter API Key</label>
+  <input 
+    type="password" 
+    value={openRouterApiKey}
+    onChange={(e) => setOpenRouterApiKey(e.target.value)}
+    placeholder="Nhập OpenRouter API Key..."
+    className="w-full bg-black border-2 border-white/20 rounded-xl px-4 py-3 font-mono text-sm focus:border-emerald-500 outline-none"
+  />
 </div>
 
 <div className="pt-2">
