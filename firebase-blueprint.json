@@ -1,0 +1,37 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "User Profile",
+      "description": "Stores user betting data and settings",
+      "type": "object",
+      "properties": {
+        "bankroll": {
+          "type": "number",
+          "description": "Current bankroll in VNĐ"
+        },
+        "ledger": {
+          "type": "array",
+          "description": "List of betting history",
+          "items": {
+            "type": "object"
+          }
+        },
+        "selectedModel": {
+          "type": "string",
+          "description": "Selected Gemini model"
+        },
+        "customApiKey": {
+          "type": "string",
+          "description": "User's custom Gemini API key"
+        }
+      },
+      "required": ["bankroll", "ledger"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "User-specific data"
+    }
+  }
+}

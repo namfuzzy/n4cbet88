@@ -1,0 +1,42 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId} (Firebase Auth UID)
+    // Fields:
+    //   - bankroll: number (required) - Current balance
+    //   - ledger: list (required) - History of bets
+    //   - selectedModel: string (optional) - AI model preference
+    //   - customApiKey: string (optional) - User's own API key
+    //
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['bankroll', 'ledger']) &&
+             data.bankroll is number &&
+             data.ledger is list &&
+             data.ledger.size() <= 1000; // Limit history size
+    }
+
+    match /users/{userId} {
+      allow read: if isOwner(userId);
+      allow create: if isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isOwner(userId) && isValidUser(request.resource.data);
+      allow delete: if false; // Prevent accidental deletion of profile
+    }
+  }
+}
