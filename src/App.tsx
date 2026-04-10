@@ -97,6 +97,13 @@ export default function App() {
   const [showTrapModal, setShowTrapModal] = useState(false);
   const [flashMessage, setFlashMessage] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<string>('');
+  const [availableModels, setAvailableModels] = useState<{name: string, displayName: string}[]>([
+    { name: 'gemini-3-flash-preview', displayName: 'Gemini 3 Flash (Nhanh)' },
+    { name: 'gemini-3.1-pro-preview', displayName: 'Gemini 3.1 Pro (Chính xác)' },
+    { name: 'gemini-3.1-flash-lite-preview', displayName: 'Gemini 3.1 Lite (Tiết kiệm)' },
+    { name: 'gemma-3-27b-it', displayName: 'Gemma 3 27B (Mạnh mẽ)' }
+  ]);
+  const [isLoadingModels, setIsLoadingModels] = useState(false);
   
   const [currentMatch, setCurrentMatch] = useState<MatchAnalysis>({
     name: '',
@@ -122,6 +129,64 @@ export default function App() {
     if (savedModel) setSelectedModel(savedModel);
     if (savedApiKey) setCustomApiKey(savedApiKey);
   }, []);
+
+  const fetchModels = async (manual = false) => {
+    try {
+      if (manual) setIsLoadingModels(true);
+      let keyToUse = customApiKey || (typeof process !== 'undefined' ? process.env.GEMINI_API_KEY : '') || 'AIzaSyAtsWt9KCcC03xjKwhdH06tY1mkdt9xFn0';
+      keyToUse = keyToUse?.trim();
+      if (!keyToUse) {
+        if (manual) setFlashMessage("Vui lòng nhập API Key trước!");
+        if (manual) setIsLoadingModels(false);
+        return;
+      }
+      
+      // Remove pageSize parameter and encode the API key to prevent invalid argument errors
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(keyToUse)}`);
+      const data = await response.json();
+      
+      if (data.models) {
+        const supported = data.models
+          .filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
+          .map((m: any) => ({
+            name: m.name.replace('models/', ''),
+            displayName: m.displayName || m.name.replace('models/', '')
+          }));
+          
+        if (supported.length > 0) {
+          setAvailableModels(supported);
+          if (manual) {
+            setFlashMessage(`Đã tải thành công ${supported.length} models!`);
+            setTimeout(() => setFlashMessage(null), 3000);
+          }
+          
+          // If current selected model is not in the list, default to the first one or a known good one
+          if (!supported.find((m: any) => m.name === selectedModel)) {
+             const defaultModel = supported.find((m: any) => m.name.includes('gemini-3.1-pro')) || supported[0];
+             if (defaultModel) setSelectedModel(defaultModel.name);
+          }
+        } else if (manual) {
+          setFlashMessage("Không tìm thấy model nào hỗ trợ generateContent.");
+          setTimeout(() => setFlashMessage(null), 3000);
+        }
+      } else if (data.error && manual) {
+        setFlashMessage(`Lỗi API: ${data.error.message}`);
+        setTimeout(() => setFlashMessage(null), 3000);
+      }
+    } catch (error: any) {
+      console.error("Error fetching Gemini models:", error);
+      if (manual) {
+        setFlashMessage(`Lỗi kết nối: ${error.message}`);
+        setTimeout(() => setFlashMessage(null), 3000);
+      }
+    } finally {
+      if (manual) setIsLoadingModels(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchModels();
+  }, [customApiKey]);
 
   useEffect(() => {
     localStorage.setItem('qb_v5_bankroll', bankroll.toString());
@@ -936,15 +1001,27 @@ export default function App() {
                   </div>
                   
                   <div className="space-y-4">
-                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">Lựa chọn Model</label>
+                    <div className="flex justify-between items-center">
+                      <label className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40">Lựa chọn Model</label>
+                      <button 
+                        onClick={() => fetchModels(true)}
+                        disabled={isLoadingModels}
+                        className="text-[10px] font-bold px-3 py-1 rounded bg-emerald-500/20 text-emerald-500 hover:bg-emerald-500/40 transition-colors flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${isLoadingModels ? 'animate-spin' : ''}`} />
+                        TẢI LẠI MODEL
+                      </button>
+                    </div>
                     <select 
                       value={selectedModel}
                       onChange={(e) => setSelectedModel(e.target.value)}
                       className="w-full bg-black border-2 border-white/20 rounded-xl px-4 py-3 font-bold focus:border-emerald-500 outline-none"
                     >
-                      <option value="gemini-3-flash-preview">Gemini 3 Flash (Nhanh)</option>
-                      <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Chính xác)</option>
-                      <option value="gemini-3.1-flash-lite-preview">Gemini 3.1 Lite (Tiết kiệm)</option>
+                      {availableModels.map((model) => (
+                        <option key={model.name} value={model.name}>
+                          {model.displayName} ({model.name})
+                        </option>
+                      ))}
                     </select>
                   </div>
 
