@@ -240,41 +240,44 @@ export default function App() {
           ];
         }
 
+        const config: any = {};
+        if (!selectedModel.includes('gemma')) {
+          config.responseMimeType = "application/json";
+          config.responseSchema = {
+            type: Type.OBJECT,
+            properties: {
+              name: { type: Type.STRING },
+              bookieOdds: { type: Type.NUMBER },
+              aiProb: { type: Type.NUMBER },
+              impliedProb: { type: Type.NUMBER },
+              edge: { type: Type.NUMBER },
+              verdict: { type: Type.STRING },
+              confidence: { type: Type.NUMBER },
+              analysis: {
+                type: Type.OBJECT,
+                properties: {
+                  tactical: { type: Type.STRING },
+                  moneyFlow: { type: Type.STRING },
+                  bookieIntent: { type: Type.STRING }
+                }
+              },
+              h2h: {
+                type: Type.OBJECT,
+                properties: {
+                  win: { type: Type.NUMBER },
+                  draw: { type: Type.NUMBER },
+                  loss: { type: Type.NUMBER }
+                }
+              }
+            },
+            required: ["name", "bookieOdds", "aiProb", "impliedProb", "edge", "verdict", "confidence", "analysis", "h2h"]
+          };
+        }
+
         const response = await ai.models.generateContent({
           model: selectedModel,
           contents: contents,
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                name: { type: Type.STRING },
-                bookieOdds: { type: Type.NUMBER },
-                aiProb: { type: Type.NUMBER },
-                impliedProb: { type: Type.NUMBER },
-                edge: { type: Type.NUMBER },
-                verdict: { type: Type.STRING },
-                confidence: { type: Type.NUMBER },
-                analysis: {
-                  type: Type.OBJECT,
-                  properties: {
-                    tactical: { type: Type.STRING },
-                    moneyFlow: { type: Type.STRING },
-                    bookieIntent: { type: Type.STRING }
-                  }
-                },
-                h2h: {
-                  type: Type.OBJECT,
-                  properties: {
-                    win: { type: Type.NUMBER },
-                    draw: { type: Type.NUMBER },
-                    loss: { type: Type.NUMBER }
-                  }
-                }
-              },
-              required: ["name", "bookieOdds", "aiProb", "impliedProb", "edge", "verdict", "confidence", "analysis", "h2h"]
-            }
-          }
+          config: config
         });
 
         await addLog("> Đã nhận phản hồi từ AI. Đang xử lý dữ liệu...", 200);
